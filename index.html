@@ -62,7 +62,7 @@
     <div class="row" id="legend"></div>
   </div>
 </div>
-<div id="hint">Один палец / левая кнопка — вращать<br>Два пальца / колесо — приблизить<br>Нажмите на деталь — её название и длина<br>Ползунок «Разборка» — разобрать модули<br><br><b>Нажмите, чтобы начать</b></div>
+<div id="hint">Один палец / левая кнопка — вращать<br>Два пальца / зажатое колесо или правая кнопка — сдвинуть<br>Щипок / колесо — приблизить туда, где курсор<br>Нажмите на деталь — её название и длина<br>Ползунок «Разборка» — разобрать модули<br><br><b>Нажмите, чтобы начать</b></div>
 
 <script>/**
  * @license
@@ -1328,6 +1328,34 @@ allB.onclick = () => { iso = -1; applyVis(); allB.classList.add('on'); modBtns.f
 
 // выбор детали
 const ray = new THREE.Raycaster(); let down = null, picked = null;
+// мышь: колесо зажато / правая — сдвиг; прокрутка колеса — зум к точке под курсором
+controls.mouseButtons = { LEFT: THREE.MOUSE.ROTATE, MIDDLE: THREE.MOUSE.PAN, RIGHT: THREE.MOUSE.PAN };
+const zRay = new THREE.Raycaster();
+window.addEventListener('wheel', e => {
+  if (e.target !== canvas) return;
+  e.preventDefault(); e.stopPropagation();
+  anim = null;
+  const r = canvas.getBoundingClientRect();
+  const p = new THREE.Vector2((e.clientX - r.left) / r.width * 2 - 1, -(e.clientY - r.top) / r.height * 2 + 1);
+  zRay.setFromCamera(p, camera);
+  const vis = meshes.filter(m => m.visible && m.parent.parent.visible);
+  const hit = zRay.intersectObjects(vis, false)[0];
+  let P;
+  if (hit) P = hit.point;
+  else {
+    const n = camera.getWorldDirection(new THREE.Vector3());
+    const pl = new THREE.Plane().setFromNormalAndCoplanarPoint(n, controls.target);
+    P = zRay.ray.intersectPlane(pl, new THREE.Vector3()) || controls.target.clone();
+  }
+  const d = Math.max(-300, Math.min(300, e.deltaMode === 1 ? e.deltaY * 33 : e.deltaY));
+  let f = Math.pow(1.0015, d);
+  const dist = camera.position.distanceTo(P);
+  if (f < 1 && dist * f < 0.25) f = 0.25 / dist;
+  if (f > 1 && camera.position.distanceTo(controls.target) * f > 250) return;
+  camera.position.sub(P).multiplyScalar(f).add(P);
+  controls.target.sub(P).multiplyScalar(f).add(P);
+}, { passive: false, capture: true });
+canvas.addEventListener('contextmenu', e => e.preventDefault());
 canvas.addEventListener('pointerdown', e => { down = [e.clientX, e.clientY]; });
 canvas.addEventListener('pointerup', e => {
   if (!down || Math.hypot(e.clientX - down[0], e.clientY - down[1]) > 6) return;
